@@ -7,11 +7,12 @@ using UnityEngine;
 
 namespace ValheimVRMod.Utilities
 {
-    
-    static class VHVRConfig {
+
+    static class VHVRConfig
+    {
 
         public static ConfigFile config;
-        
+
         // Immutable Settings
         private static ConfigEntry<bool> vrModEnabled;
         private static ConfigEntry<bool> nonVrPlayer;
@@ -101,7 +102,7 @@ namespace ValheimVRMod.Utilities
         private static ConfigEntry<bool> useAmplifyOcclusion;
         private static ConfigEntry<float> taaSharpenAmmount;
         private static ConfigEntry<float> nearClipPlane;
-        
+
         // Motion Control Settings
         private static ConfigEntry<bool> useArrowPredictionGraphic;
         private static ConfigEntry<float> arrowParticleSize;
@@ -118,6 +119,36 @@ namespace ValheimVRMod.Utilities
         private static ConfigEntry<bool> freePlaceAutoReturn;
         private static ConfigEntry<bool> advancedRotationUpWorld;
         private static ConfigEntry<string> blockingType;
+
+        // Spectator Camera Settings
+        private static ConfigEntry<bool> useSpectatorCamera;
+        private static ConfigEntry<string> spectatorCameraType;
+
+        private static ConfigEntry<float> fpvCamFOV;
+        private static ConfigEntry<float> fpvCamNearClipPlane;
+        private static ConfigEntry<float> fpvCamPositionDampening;
+        private static ConfigEntry<float> fpvCamRotationDampening;
+        private static ConfigEntry<float> fpvCamZPositionOffset;
+
+        private static ConfigEntry<float> actionCamFOV;
+        private static ConfigEntry<float> actionPositionDampening;
+        private static ConfigEntry<float> actionRotationDampening;
+        private static ConfigEntry<float> actionYPositionOffset;
+        private static ConfigEntry<float> actionZPositionOffset;
+
+        private static ConfigEntry<bool> dynamicCamStopNear;
+        private static ConfigEntry<float> dynamicCamFOV;
+        private static ConfigEntry<float> dynamicCamPosDamp;
+        private static ConfigEntry<float> dynamicCamRotDamp;
+        private static ConfigEntry<float> dynamicCamYPositionOffset;
+        private static ConfigEntry<float> dynamicCamZPositionOffset;
+
+        private static ConfigEntry<float> dynamicBoatCamFOV;
+        private static ConfigEntry<float> dynamicBoatCamPosDamp;
+        private static ConfigEntry<float> dynamicBoatCamRotDamp;
+        private static ConfigEntry<float> dynamicBoatCamYPositionOffset;
+        private static ConfigEntry<float> dynamicBoatCamZPositionOffset;
+
 
 #if DEBUG
         private static ConfigEntry<float> DebugPosX;
@@ -136,8 +167,9 @@ namespace ValheimVRMod.Utilities
         private const string k_arrowRestAsiatic = "Asiatic";
         private const string k_arrowRestMediterranean = "Mediterranean";
 
-        public static void InitializeConfiguration(ConfigFile mConfig) {
-            
+        public static void InitializeConfiguration(ConfigFile mConfig)
+        {
+
             config = mConfig;
             InitializeImmutableSettings();
             InitializeGeneralSettings();
@@ -146,6 +178,7 @@ namespace ValheimVRMod.Utilities
             InitializeControlsSettings();
             InitializeGraphicsSettings();
             InitializeMotionControlSettings();
+            InitializeSpectatorCameraSettings();
             DoVersionInit();
         }
 
@@ -175,13 +208,13 @@ namespace ValheimVRMod.Utilities
         private static void ResetVrHudPositions()
         {
             LogUtils.LogDebug("Resetting HUD Positions for new version.");
-            leftWristPos.Value = (Vector3) leftWristPos.DefaultValue;
-            leftWristRot.Value = (Quaternion) leftWristRot.DefaultValue;
-            rightWristPos.Value = (Vector3) rightWristPos.DefaultValue;
+            leftWristPos.Value = (Vector3)leftWristPos.DefaultValue;
+            leftWristRot.Value = (Quaternion)leftWristRot.DefaultValue;
+            rightWristPos.Value = (Vector3)rightWristPos.DefaultValue;
             rightWristRot.Value = (Quaternion)rightWristRot.DefaultValue;
         }
 
-        private static void InitializeImmutableSettings() 
+        private static void InitializeImmutableSettings()
         {
             vrModEnabled = createImmutableSetting("Immutable",
                 "ModEnabled",
@@ -217,21 +250,23 @@ namespace ValheimVRMod.Utilities
             T defaultValue,
             string description)
         {
-            
+
             ConfigEntry<T> immutableSetting = config.Bind(section, key, defaultValue, description);
-            
+
             // now trying to find same setting in start options and override on match
-            
+
             var p = new OptionSet {
-                { key + "=", 
+                { key + "=",
                     "the immutable " + key + " to get the value of",
                     (T v) => immutableSetting.Value = v }
             };
 
-            try {
+            try
+            {
                 p.Parse(Environment.GetCommandLineArgs());
             }
-            catch (Exception e) {
+            catch (Exception e)
+            {
                 Debug.LogError("Error parsing Start Option [" + key + "]: " + e.Message);
             }
 
@@ -343,7 +378,7 @@ namespace ValheimVRMod.Utilities
                                       3f,
                                       new ConfigDescription("Distance to draw the UI panel at.",
                                       new AcceptableValueRange<float>(0.5f, 15f)));
-            uiPanelVerticalOffset  = config.Bind("UI",
+            uiPanelVerticalOffset = config.Bind("UI",
                                       "UIPanelVerticalOffset",
                                       1f,
                                       new ConfigDescription("Height the UI Panel will be drawn.",
@@ -607,7 +642,8 @@ namespace ValheimVRMod.Utilities
                                         new AcceptableValueRange<float>(0, 0.5f)));
         }
 
-        private static void InitializeMotionControlSettings() {
+        private static void InitializeMotionControlSettings()
+        {
 
             useArrowPredictionGraphic = config.Bind("Motion Control",
                 "UseArrowPredictionGraphic",
@@ -711,6 +747,157 @@ namespace ValheimVRMod.Utilities
             // #endif
         }
 
+        private static void InitializeSpectatorCameraSettings()
+        {
+            useSpectatorCamera = config.Bind("Spectator Camera",
+                                 "UseSpectatorCamera",
+                                 false,
+                                 "Use this to toggle the spectator desktop camera.");
+
+            spectatorCameraType = config.Bind("Spectator Camera",
+                                "CameraType",
+                                "DynamicThirdPerson",
+                                new ConfigDescription("Sets the behaviour of the spectator camera. Dynamic Third Person is a follow camera, that adjusts to various in-game actions. " +
+                                "StabilizedFPV is a stabilized first person view. " +
+                                "Action Camera is a high FOV follow camera. ",
+                                new AcceptableValueList<string>(new string[] { "ActionCamera", "DynamicThirdPerson", "StabilizedFPV" })));
+
+
+            // Spectator Camera Settings
+            fpvCamFOV = config.Bind("Spectator Camera",
+                                     "SFPV.FieldofView",
+                                      60f,
+                                      new ConfigDescription("The FOV used by the camera when in Spectator FPV.",
+                                      new AcceptableValueRange<float>(40f, 120f)));
+
+            fpvCamNearClipPlane = config.Bind("Spectator Camera",
+                                     "SFPV.NearClipPlane",
+                                      0.1f,
+                                      new ConfigDescription("This can be used to adjust the distance where where anything inside will be clipped out and not rendered. ",
+                                      new AcceptableValueRange<float>(0, 0.5f)));
+
+
+            fpvCamPositionDampening = config.Bind("Spectator Camera",
+                                     "SFPV.PosDampening",
+                                      0.01f,
+                                      new ConfigDescription("The position smoothing applied to the Camera Position.",
+                                      new AcceptableValueRange<float>(0f, 0.1f)));
+
+            fpvCamRotationDampening = config.Bind("Spectator Camera",
+                                     "SFPV.RotDampening",
+                                      0.08f,
+                                      new ConfigDescription("The rotation smoothing applied to the Camera Rotation.",
+                                      new AcceptableValueRange<float>(0f, 0.1f)));
+
+            fpvCamZPositionOffset = config.Bind("Spectator Camera",
+                                        "SFPV.ZPosOffset",
+                                        0f,
+                                        new ConfigDescription("The Z Position offset applied to the Spectator Camera Position. Adjust this to move the camera backwards and forward.",
+                                        new AcceptableValueRange<float>(-1f, 1f)));
+
+
+            // Action Camera Settings
+            actionCamFOV = config.Bind("Spectator Camera",
+                                       "AC.FieldofView",
+                                        60f,
+                                        new ConfigDescription("The FOV used by the Action Camera.",
+                                        new AcceptableValueRange<float>(40f, 120f)));
+
+            actionPositionDampening = config.Bind("Spectator Camera",
+                                     "AC.PosDampening",
+                                      0.9f,
+                                      new ConfigDescription("The position smoothing applied to the Action Camera Position.",
+                                      new AcceptableValueRange<float>(0f, 2f)));
+
+            actionRotationDampening = config.Bind("Spectator Camera",
+                                     "AC.RotDampening",
+                                      -0.5f,
+                                      new ConfigDescription("The rotation smoothing applied to the Action Camera Rotation.",
+                                      new AcceptableValueRange<float>(-1f, -0.01f))); // Negative to reverse the slide bar. 
+
+            actionYPositionOffset = config.Bind("Spectator Camera",
+                                     "AC.YPosOffset",
+                                      2f,
+                                      new ConfigDescription("The Y Position offset applied to the Action Camera Position.",
+                                      new AcceptableValueRange<float>(0f, 4f)));
+
+            actionZPositionOffset = config.Bind("Spectator Camera",
+                                     "AC.ZPosOffset",
+                                      -2f,
+                                      new ConfigDescription("The Z Position offset applied to the Action Camera Position.",
+                                      new AcceptableValueRange<float>(-4f, 0f)));
+            // Dynamic Camera Settings
+            dynamicCamStopNear = config.Bind("Spectator Camera",
+                                             "DC.ProximityStop",
+                                             true,
+                                             "Stops the camera when close to the player. It allows for close up views. ");
+
+            dynamicCamFOV = config.Bind("Spectator Camera",
+                                       "DC.FieldofView",
+                                        70f,
+                                        new ConfigDescription("The FOV used by the camera when the Dynamic Camera is active.",
+                                        new AcceptableValueRange<float>(40f, 120f)));
+
+            dynamicCamPosDamp = config.Bind("Spectator Camera",
+                                            "DC.PosDampening",
+                                             0.7f,
+                                             new ConfigDescription("The position smoothing applied to the Dynamic Camera Position.",
+                                             new AcceptableValueRange<float>(0f, 2f)));
+
+            dynamicCamRotDamp = config.Bind("Spectator Camera",
+                                           "DC.RotDampening",
+                                            -0.7f,
+                                            new ConfigDescription("The rotation smoothing applied to the Dynamic Camera Rotation.",
+                                            new AcceptableValueRange<float>(-2f, -0.01f))); // Negative to reverse the slide bar.
+
+            dynamicCamYPositionOffset = config.Bind("Spectator Camera",
+                                                   "DC.YPosOffset",
+                                                    1.5f,
+                                                    new ConfigDescription("The Y Position offset applied to the Dynamic Camera Position.",
+                                                    new AcceptableValueRange<float>(0f, 4f)));
+
+            dynamicCamZPositionOffset = config.Bind("Spectator Camera",
+                                                    "DC.ZPosOffset",
+                                                   -2f,
+                                                    new ConfigDescription("The Z Position offset applied to the Dynamic Camera Position.",
+                                                    new AcceptableValueRange<float>(-4f, 0f)));
+
+
+
+            dynamicBoatCamFOV = config.Bind("Spectator Camera",
+                                       "DC.BoatFieldofView",
+                                        100f,
+                                        new ConfigDescription("The FOV used by the Dynamic Camera when seated in a boat.",
+                                        new AcceptableValueRange<float>(40f, 120f)));
+
+            dynamicBoatCamPosDamp = config.Bind("Spectator Camera",
+                                            "DC.BoatPosDamp",
+                                             0.7f,
+                                             new ConfigDescription("The position smoothing used by the Dynamic Camera when seated in a boat.",
+                                             new AcceptableValueRange<float>(0f, 2f)));
+
+            dynamicBoatCamRotDamp = config.Bind("Spectator Camera",
+                                           "DC.BoatRotDamp",
+                                            0.7f,
+                                            new ConfigDescription("The rotation smoothing used by the Dynamic Camera when seated in a boat.",
+                                            new AcceptableValueRange<float>(0f, 2f)));
+
+            dynamicBoatCamYPositionOffset = config.Bind("Spectator Camera",
+                                                   "DC.BoatYPosOffset",
+                                                    3f,
+                                                    new ConfigDescription("The Y Position offset used by the Dynamic Camera when seated in a boat.",
+                                                    new AcceptableValueRange<float>(0f, 6f)));
+
+            dynamicBoatCamZPositionOffset = config.Bind("Spectator Camera",
+                                                    "DC.BoatZPosOffset",
+                                                   -3f,
+                                                    new ConfigDescription("The Z Position offset used by the Dynamic Camera when seated in a boat.",
+                                                    new AcceptableValueRange<float>(-6f, 0f)));
+
+
+
+        }
+
         public static bool ModEnabled()
         {
             return vrModEnabled.Value;
@@ -727,16 +914,20 @@ namespace ValheimVRMod.Utilities
             if (mode == "Right")
             {
                 return OpenVRSettings.MirrorViewModes.Right;
-            } else if (mode == "Left")
+            }
+            else if (mode == "Left")
             {
                 return OpenVRSettings.MirrorViewModes.Left;
-            } else if (mode == "OpenVR")
+            }
+            else if (mode == "OpenVR")
             {
                 return OpenVRSettings.MirrorViewModes.OpenVR;
-            } else if (mode == "None")
+            }
+            else if (mode == "None")
             {
                 return OpenVRSettings.MirrorViewModes.None;
-            } else
+            }
+            else
             {
                 LogUtils.LogWarning("Invalid mirror mode setting. Defaulting to None");
                 return OpenVRSettings.MirrorViewModes.None;
@@ -825,7 +1016,8 @@ namespace ValheimVRMod.Utilities
             return enableHeadReposition.Value;
         }
 
-        public static void UpdateFirstPersonHeadOffset(Vector3 offset) {
+        public static void UpdateFirstPersonHeadOffset(Vector3 offset)
+        {
             headOffsetX.Value = Mathf.Clamp(offset.x, -2f, 2f);
             headOffsetY.Value = Mathf.Clamp(offset.y, -2f, 2f);
             headOffsetZ.Value = Mathf.Clamp(offset.z, -2f, 2f);
@@ -950,7 +1142,8 @@ namespace ValheimVRMod.Utilities
 
         public static float ArrowRestHorizontalOffsetMultiplier()
         {
-            switch (arrowRestSide.Value) {
+            switch (arrowRestSide.Value)
+            {
                 case k_arrowRestAsiatic:
                     return LeftHanded() ? -1 : 1;
                 case k_arrowRestMediterranean:
@@ -973,29 +1166,31 @@ namespace ValheimVRMod.Utilities
             return nonVrPlayer.Value;
 #endif
         }
-        
+
 #if DEBUG
         public static Vector3 getDebugPos()
         {
             return new Vector3(DebugPosX.Value, DebugPosY.Value, DebugPosZ.Value);
         }
-        
+
         public static Vector3 getDebugRot()
         {
             return new Vector3(DebugRotX.Value, DebugRotY.Value, DebugRotZ.Value);
         }
-        
-        public static float getDebugScale() {
+
+        public static float getDebugScale()
+        {
             return DebugScale.Value;
         }
 #endif
-        
+
         public static bool UnlockDesktopCursor()
         {
             return unlockDesktopCursor.Value;
         }
 
-        public static bool getQuickMenuFollowCam() {
+        public static bool getQuickMenuFollowCam()
+        {
             return QuickMenuFollowCam.Value;
         }
         public static int getQuickMenuAngle()
@@ -1022,17 +1217,19 @@ namespace ValheimVRMod.Utilities
         {
             return Mathf.Abs(smoothSnapSpeed.Value);
         }
-        
+
         public static bool WeaponNeedsSpeed()
         {
             return weaponNeedsSpeed.Value;
         }
 
-        public static bool RoomScaleSneakEnabled() {
+        public static bool RoomScaleSneakEnabled()
+        {
             return roomScaleSneaking.Value;
         }
 
-        public static float RoomScaleSneakHeight() {
+        public static float RoomScaleSneakHeight()
+        {
             return roomScaleSneakHeight.Value;
         }
 
@@ -1115,17 +1312,17 @@ namespace ValheimVRMod.Utilities
         {
             return useLegacyHud.Value;
         }
-        
+
         public static float CameraHudX()
         {
             return cameraHudX.Value;
         }
-        
+
         public static float CameraHudY()
         {
             return cameraHudY.Value;
         }
-        
+
         public static float CameraHudScale()
         {
             return cameraHudScale.Value;
@@ -1214,10 +1411,121 @@ namespace ValheimVRMod.Utilities
         {
             return buildOnRelease.Value;
         }
-      
+
         public static bool BhapticsEnabled()
         {
             return bhapticsEnabled.Value && !NonVrPlayer();
         }
+
+        // Spectator Camera Getters
+
+        public static bool UseSpectatorCamera()
+        {
+            return useSpectatorCamera.Value;
+        }
+        public static String GetSpectatorCameraType()
+        {
+            return spectatorCameraType.Value;
+        }
+
+
+        //FPV
+        public static float GetfpvCamFOV()
+        {
+            return fpvCamFOV.Value;
+        }
+        public static float GetfpvCamNearClipPlane()
+        {
+            return fpvCamNearClipPlane.Value;
+        }
+
+        public static float GetfpvCamPositionDampening()
+        {
+            return fpvCamPositionDampening.Value;
+        }
+
+        public static float GetfpvCamRotationDampening()
+        {
+            return fpvCamRotationDampening.Value;
+        }
+
+        public static float GetfpvCamZPositionOffset()
+        {
+            return fpvCamZPositionOffset.Value;
+        }
+        // Action Camera
+
+        public static float GetactionCamFOV()
+        {
+            return actionCamFOV.Value;
+        }
+
+        public static float GetactionPositionDampening()
+        {
+            return actionPositionDampening.Value;
+        }
+
+        public static float GetactionRotationDampening()
+        {
+            return -(actionRotationDampening.Value);
+        }
+
+        public static Vector3 GetactionPositionOffset()
+        {
+            return new Vector3(0, actionYPositionOffset.Value, actionZPositionOffset.Value);
+        }
+
+        // Dynamic Camera
+
+
+
+        public static bool GetdynamicCamStopNear()
+        {
+            return dynamicCamStopNear.Value;
+        }
+
+        public static float GetdynamicCamFOV()
+        {
+            return dynamicCamFOV.Value;
+        }
+
+        public static float GetdynamicCamPosDamp()
+        {
+            return dynamicCamPosDamp.Value;
+        }
+
+        public static float GetdynamicCamRotDamp()
+        {
+            return -(dynamicCamRotDamp.Value);
+        }
+
+        public static Vector3 GetdynamicCamoffset()
+        {
+            return new Vector3(0, dynamicCamYPositionOffset.Value, dynamicCamZPositionOffset.Value);
+        }
+
+        public static float GetdynamicBoatCamFOV()
+        {
+            return dynamicBoatCamFOV.Value;
+        }
+
+
+        public static float GetdynamicBoatCamPosDamp()
+        {
+            return dynamicBoatCamPosDamp.Value;
+        }
+
+        public static float GetdynamicBoatCamRotDamp()
+        {
+            return dynamicBoatCamRotDamp.Value;
+        }
+
+
+        public static Vector3 GetdynamicBoatCamoffset()
+        {
+            return new Vector3(0, dynamicBoatCamYPositionOffset.Value, dynamicBoatCamZPositionOffset.Value);
+        }
+
+
     }
 }

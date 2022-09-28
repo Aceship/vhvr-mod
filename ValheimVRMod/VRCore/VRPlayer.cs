@@ -1,6 +1,7 @@
 ﻿using static ValheimVRMod.Utilities.LogUtils;
 
 using AmplifyOcclusion;
+using System;
 using System.Reflection;
 using RootMotion.FinalIK;
 using UnityEngine;
@@ -61,7 +62,7 @@ namespace ValheimVRMod.VRCore
         private static VRIK _vrik;
 
         private static float referencePlayerHeight;
-        public static bool isRoomscaleSneaking {  get { return _isRoomscaleSneaking; } }
+        public static bool isRoomscaleSneaking { get { return _isRoomscaleSneaking; } }
         private static bool _isRoomscaleSneaking = false;
 
         private static GameObject _prefab;
@@ -69,9 +70,14 @@ namespace ValheimVRMod.VRCore
         private static VRPlayer _vrPlayerInstance;
         private static HeadZoomLevel _headZoomLevel = HeadZoomLevel.FirstPerson;
 
-        private Camera _vrCam;
+        private Camera camera;
         private Camera _handsCam;
         private Camera _skyboxCam;
+        private Camera _vrCamera;
+        private Camera _spectatorSkyboxCam;
+        private Camera _spectatorCam;
+
+
 
         //Roomscale movement variables
         private Transform _vrCameraRig;
@@ -82,8 +88,8 @@ namespace ValheimVRMod.VRCore
         private float _forwardSmoothVel = 0.0f, _sideSmoothVel = 0.0f;
         private static float _roomscaleAnimationForwardSpeed = 0.0f;
         private static float _roomscaleAnimationSideSpeed = 0.0f;
-        public static float roomscaleAnimationForwardSpeed { get { return _roomscaleAnimationForwardSpeed;} }
-        public static float roomscaleAnimationSideSpeed { get { return _roomscaleAnimationSideSpeed;} }
+        public static float roomscaleAnimationForwardSpeed { get { return _roomscaleAnimationForwardSpeed; } }
+        public static float roomscaleAnimationSideSpeed { get { return _roomscaleAnimationSideSpeed; } }
         public static Vector3 roomscaleMovement { get; private set; }
 
         private static Hand _leftHand;
@@ -92,8 +98,8 @@ namespace ValheimVRMod.VRCore
         private static SteamVR_LaserPointer _rightPointer;
         private string _preferredHand;
 
-        public static Hand leftHand { get { return _leftHand;} }
-        public static Hand rightHand { get { return _rightHand;} }
+        public static Hand leftHand { get { return _leftHand; } }
+        public static Hand rightHand { get { return _rightHand; } }
 
         public static bool handsActive
         {
@@ -103,7 +109,7 @@ namespace ValheimVRMod.VRCore
             }
         }
 
-        public static SteamVR_LaserPointer leftPointer { get { return _leftPointer;} }
+        public static SteamVR_LaserPointer leftPointer { get { return _leftPointer; } }
         public static SteamVR_LaserPointer rightPointer { get { return _rightPointer; } }
         public static SteamVR_LaserPointer activePointer
         {
@@ -124,7 +130,9 @@ namespace ValheimVRMod.VRCore
             }
         }
 
-        public static bool inFirstPerson { get
+        public static bool inFirstPerson
+        {
+            get
             {
                 return (_headZoomLevel == HeadZoomLevel.FirstPerson) && attachedToPlayer;
             }
@@ -137,7 +145,7 @@ namespace ValheimVRMod.VRCore
                 if (Player.m_localPlayer != null && attachedToPlayer)
                 {
                     Vector3 relativeVelocity = Player.m_localPlayer.GetVelocity();
-                    if(Player.m_localPlayer.m_lastGroundBody)
+                    if (Player.m_localPlayer.m_lastGroundBody)
                         relativeVelocity -= Player.m_localPlayer.m_lastGroundBody.velocity;
                     return relativeVelocity.magnitude > 0.5f;
                 }
@@ -178,6 +186,8 @@ namespace ValheimVRMod.VRCore
             THIRD_PERSON_CONFIG_OFFSET = VHVRConfig.GetThirdPersonHeadOffset();
             ensurePlayerInstance();
             gameObject.AddComponent<VRControls>();
+
+
         }
 
         void Update()
@@ -191,18 +201,20 @@ namespace ValheimVRMod.VRCore
             enableCameras();
             checkAndSetHandsAndPointers();
             updateVrik();
-            UpdateAmplifyOcclusionStatus();
+            UpdateAmplifyOcclusionStatus(_vrCamera);
+            UpdateAmplifyOcclusionStatus(_spectatorCam);
             Pose.checkInteractions();
             CheckSneakRoomscale();
-            
+
         }
 
-        private void FixedUpdate() 
+        private void FixedUpdate()
         {
-            if(inFirstPerson)
+            if (inFirstPerson)
             {
                 DoRoomScaleMovement();
-            } else roomscaleMovement = Vector3.zero;
+            }
+            else roomscaleMovement = Vector3.zero;
         }
 
         void maybeUpdateHeadPosition()
@@ -245,22 +257,25 @@ namespace ValheimVRMod.VRCore
             if (inFirstPerson)
             {
                 FIRST_PERSON_OFFSET += offset;
-            } else
+            }
+            else
             {
                 THIRD_PERSON_CONFIG_OFFSET += offset;
                 VHVRConfig.UpdateThirdPersonHeadOffset(THIRD_PERSON_CONFIG_OFFSET);
             }
         }
 
-        void UpdateAmplifyOcclusionStatus()
+        void UpdateAmplifyOcclusionStatus(Camera camera)
         {
-            if (_vrCam == null || _vrCam.gameObject.GetComponent<AmplifyOcclusionEffect>() == null)
+            if (camera == null || camera.gameObject.GetComponent<AmplifyOcclusionEffect>() == null)
             {
                 return;
             }
-            var effect = _vrCam.gameObject.GetComponent<AmplifyOcclusionEffect>();
+            var effect = camera.gameObject.GetComponent<AmplifyOcclusionEffect>();
             effect.SampleCount = SampleCountLevel.Medium;
+            effect.PerPixelNormals = AmplifyOcclusionEffect.PerPixelNormalSource.GBuffer;
             effect.enabled = VHVRConfig.UseAmplifyOcclusion();
+            effect.FilterEnabled = false;
         }
 
         private void checkAndSetHandsAndPointers()
@@ -285,20 +300,24 @@ namespace ValheimVRMod.VRCore
                 {
                     setPointerActive(_leftPointer, true);
                     setPointerActive(_rightPointer, false);
-                } else
+                }
+                else
                 {
                     setPointerActive(_rightPointer, true);
                     setPointerActive(_leftPointer, false);
                 }
-            } else if (handIsActive(_rightHand, _rightPointer))
+            }
+            else if (handIsActive(_rightHand, _rightPointer))
             {
                 setPointerActive(_rightPointer, true);
                 setPointerActive(_leftPointer, false);
-            } else if (handIsActive(_leftHand, _leftPointer))
+            }
+            else if (handIsActive(_leftHand, _leftPointer))
             {
                 setPointerActive(_leftPointer, true);
                 setPointerActive(_rightPointer, false);
-            } else
+            }
+            else
             {
                 setPointerActive(_leftPointer, false);
                 setPointerActive(_rightPointer, false);
@@ -399,7 +418,7 @@ namespace ValheimVRMod.VRCore
 
         private void enableCameras()
         {
-            if (_vrCam == null || !_vrCam.enabled)
+            if (camera == null || !camera.enabled)
             {
                 enableVrCamera();
             }
@@ -410,6 +429,16 @@ namespace ValheimVRMod.VRCore
             if (_skyboxCam == null || !_skyboxCam.enabled)
             {
                 enableSkyboxCamera();
+            }
+
+            if (_spectatorCam == null)
+            {
+                EnableSpectatorCamera();
+            }
+
+            if (_spectatorSkyboxCam == null)
+            {
+                EnableSpectatorSkyboxCamera();
             }
         }
 
@@ -450,7 +479,7 @@ namespace ValheimVRMod.VRCore
             _fadeManager = vrCam.gameObject.AddComponent<FadeToBlackManager>();
             _instance.SetActive(true);
             vrCam.enabled = true;
-            _vrCam = vrCam;
+            camera = vrCam;
             _vrCameraRig = vrCam.transform.parent;
 
             _fadeManager.OnFadeToWorld += () => {
@@ -458,6 +487,8 @@ namespace ValheimVRMod.VRCore
                 VRPlayer.headPositionInitialized = false;
                 VRPlayer.vrPlayerInstance?.ResetRoomscaleCamera();
             };
+
+            _vrCamera = vrCam;
         }
 
         // Create a camera and assign its culling mask
@@ -493,7 +524,7 @@ namespace ValheimVRMod.VRCore
                 return;
             }
             Camera vrCam = CameraUtils.getCamera(CameraUtils.VR_CAMERA);
-            if(vrCam == null || vrCam.gameObject == null)
+            if (vrCam == null || vrCam.gameObject == null)
             {
                 return;
             }
@@ -505,6 +536,73 @@ namespace ValheimVRMod.VRCore
             originalSkyboxCamera.enabled = false;
             vrSkyboxCam.enabled = true;
             _skyboxCam = vrSkyboxCam;
+        }
+
+        private void EnableSpectatorSkyboxCamera()
+        {
+            Camera originalSkyboxCamera = CameraUtils.getCamera(CameraUtils.SKYBOX_CAMERA);
+            if (originalSkyboxCamera == null || originalSkyboxCamera.gameObject == null)
+            {
+                return;
+            }
+            Camera spectatorCamera = CameraUtils.getCamera(CameraUtils.SPECTATOR_CAMERA);
+            if (spectatorCamera == null || spectatorCamera.gameObject == null)
+            {
+                return;
+            }
+            GameObject spectatorSkyboxCamObj = new GameObject(CameraUtils.SPECTATOR_SKYBOX_CAMERA);
+            Camera spectatorSkyboxCam = spectatorSkyboxCamObj.AddComponent<Camera>();
+            Transform originalTransform = spectatorSkyboxCam.transform;
+            spectatorSkyboxCam.CopyFrom(originalSkyboxCamera);
+            spectatorSkyboxCam.transform.SetPositionAndRotation(originalTransform.position, originalTransform.rotation);
+            spectatorSkyboxCam.depth = 400;
+            spectatorSkyboxCam.clearFlags = CameraClearFlags.Skybox;
+            spectatorSkyboxCam.stereoTargetEye = StereoTargetEyeMask.None;
+            spectatorSkyboxCam.transform.SetParent(spectatorCamera.transform, false);
+            originalSkyboxCamera.enabled = false;
+            spectatorSkyboxCam.enabled = false;
+
+            _spectatorSkyboxCam = spectatorSkyboxCam;
+
+            CameraUtils.PrintCamera(CameraUtils.getCamera(CameraUtils.VRSKYBOX_CAMERA));
+
+
+        }
+        private void EnableSpectatorCamera()
+        {
+
+            Camera mainCamera = CameraUtils.getCamera(CameraUtils.MAIN_CAMERA);
+
+            if (mainCamera == null)
+            {
+                LogError("Main Camera is null.");
+                return;
+            }
+
+
+            Camera originalSkyboxCamera = CameraUtils.getCamera(CameraUtils.SKYBOX_CAMERA);
+            if (originalSkyboxCamera == null || originalSkyboxCamera.gameObject == null)
+            {
+                return;
+            }
+
+
+
+            GameObject spectatorCameraObj = new GameObject(CameraUtils.SPECTATOR_CAMERA);
+            Camera spectatorCamera = spectatorCameraObj.AddComponent<Camera>();
+            SpectatorCamera spectatorCameraComp = spectatorCameraObj.AddComponent<SpectatorCamera>() as SpectatorCamera;
+            spectatorCamera.CopyFrom(mainCamera);
+            spectatorCamera.ResetCullingMatrix();
+
+            maybeCopyPostProcessingEffects(spectatorCamera, mainCamera);
+            maybeAddAmplifyOcclusion(spectatorCamera);
+
+            spectatorCamera.stereoTargetEye = StereoTargetEyeMask.None;
+            spectatorCamera.depth = 500;
+            spectatorCamera.allowHDR = true;
+            spectatorCamera.useOcclusionCulling = true;
+            spectatorCamera.enabled = false;
+            _spectatorCam = spectatorCamera;
         }
 
         private void attachVrPlayerToWorldObject()
@@ -530,7 +628,8 @@ namespace ValheimVRMod.VRCore
             if (mouseScroll > 0f)
             {
                 zoomCamera(true);
-            } else if (mouseScroll < 0f)
+            }
+            else if (mouseScroll < 0f)
             {
                 zoomCamera(false);
             }
@@ -538,7 +637,7 @@ namespace ValheimVRMod.VRCore
 
         private void zoomCamera(bool zoomIn)
         {
-            switch(_headZoomLevel)
+            switch (_headZoomLevel)
             {
                 case HeadZoomLevel.FirstPerson:
                     _headZoomLevel = zoomIn ? HeadZoomLevel.FirstPerson : HeadZoomLevel.ThirdPerson0;
@@ -620,12 +719,12 @@ namespace ValheimVRMod.VRCore
             setHeadVisibility(!inFirstPerson);
             // Update the position with the first person adjustment calculated in init phase
             Vector3 desiredPosition = getDesiredPosition(playerCharacter);
-            
+
             _instance.transform.localPosition = desiredPosition - playerCharacter.transform.position  // Base Positioning
                                                + Vector3.up * getHeadHeightAdjust(playerCharacter)
                                                + Vector3.up * firstPersonAdjust; // Offset from calibration on tracking recenter
-                                               
-            if(_headZoomLevel != HeadZoomLevel.FirstPerson)
+
+            if (_headZoomLevel != HeadZoomLevel.FirstPerson)
             {
                 _instance.transform.localPosition += getHeadOffset(_headZoomLevel) // Player controlled offset (zeroed on tracking reset)
                             + Vector3.forward * NECK_OFFSET; // Move slightly forward to position on neck
@@ -634,18 +733,18 @@ namespace ValheimVRMod.VRCore
             else
                 setPlayerVisualsOffset(playerCharacter.transform,
                                 -getHeadOffset(_headZoomLevel) // Player controlled offset (zeroed on tracking reset)
-                                -Vector3.forward * NECK_OFFSET // Move slightly forward to position on neck
+                                - Vector3.forward * NECK_OFFSET // Move slightly forward to position on neck
                                 );
         }
 
         //Moves all the effects and the meshes that compose the player, doesn't move the Rigidbody
         private void setPlayerVisualsOffset(Transform playerTransform, Vector3 offset)
         {
-            for(int i = 0; i < playerTransform.childCount; i++)
+            for (int i = 0; i < playerTransform.childCount; i++)
             {
                 Transform child = playerTransform.GetChild(i);
-                if(child == _instance.transform || child.name == "EyePos") continue;
-                playerTransform.GetChild(i).localPosition = offset;                          
+                if (child == _instance.transform || child.name == "EyePos") continue;
+                playerTransform.GetChild(i).localPosition = offset;
             }
         }
 
@@ -670,7 +769,8 @@ namespace ValheimVRMod.VRCore
                 return;
             }
             maybeAddVrik(player);
-            if (_vrik != null) {
+            if (_vrik != null)
+            {
                 _vrik.enabled = VHVRConfig.UseVrControls() &&
                     inFirstPerson &&
                     validVrikAnimatorState(player.GetComponentInChildren<Animator>());
@@ -693,7 +793,7 @@ namespace ValheimVRMod.VRCore
                 return;
             }
             var cam = CameraUtils.getCamera(CameraUtils.VR_CAMERA);
-            _vrik = VrikCreator.initialize(player.gameObject, 
+            _vrik = VrikCreator.initialize(player.gameObject,
                 leftHand.transform, rightHand.transform, cam.transform);
             var vrPlayerSync = player.gameObject.GetComponent<VRPlayerSync>();
             vrPlayerSync.camera = cam.gameObject;
@@ -733,7 +833,7 @@ namespace ValheimVRMod.VRCore
                 Vector3 desiredPosition = getDesiredPosition(playerCharacter);
                 _instance.transform.localPosition = desiredPosition - playerCharacter.transform.position;
 
-                if(_headZoomLevel != HeadZoomLevel.FirstPerson)
+                if (_headZoomLevel != HeadZoomLevel.FirstPerson)
                     _instance.transform.localPosition += getHeadOffset(_headZoomLevel);
                 else
                     setPlayerVisualsOffset(playerCharacter.transform, -getHeadOffset(_headZoomLevel));
@@ -782,14 +882,15 @@ namespace ValheimVRMod.VRCore
             attachedToPlayer = false;
             headPositionInitialized = false;
         }
-        
+
         // Used to turn off the head model when player is currently occupying it.
         private void setHeadVisibility(bool isVisible)
         {
-            if (VHVRConfig.UseVrControls()) {
+            if (VHVRConfig.UseVrControls())
+            {
                 return;
             }
-            
+
             var headBone = getHeadBone();
             if (headBone != null)
             {
@@ -812,18 +913,18 @@ namespace ValheimVRMod.VRCore
             return animator.GetBoneTransform(HumanBodyBones.Head);
         }
 
-        private void maybeAddAmplifyOcclusion(Camera vrCamera)
+        private void maybeAddAmplifyOcclusion(Camera camera)
         {
-            if (vrCamera == null)
+            if (camera == null)
             {
                 return;
             }
-            AmplifyOcclusionEffect effect = vrCamera.gameObject.GetComponent<AmplifyOcclusionEffect>();
+            AmplifyOcclusionEffect effect = camera.gameObject.GetComponent<AmplifyOcclusionEffect>();
             if (effect != null)
             {
                 return;
             }
-            vrCamera.gameObject.AddComponent<AmplifyOcclusionEffect>();
+            camera.gameObject.AddComponent<AmplifyOcclusionEffect>();
         }
 
         // This will, if it hasn't already done so, try and find the PostProcessingBehaviour
@@ -852,11 +953,12 @@ namespace ValheimVRMod.VRCore
                     foundMainCameraPostProcesor = true;
                     postProcessingBehavior = vrCamera.gameObject.AddComponent<PostProcessingBehaviour>();
                     LogDebug("Copying Main Camera PostProcessingBehaviour");
-                    var profileClone = Instantiate(ppb.profile);
+                    PostProcessingProfile ppbProfile = ppb.profile;
+                    PostProcessingProfile copiedProfile = ppbProfile;
                     //Need to copy only the profile and jitterFuncMatrix, everything else will be instanciated when enabled
-                    postProcessingBehavior.profile = profileClone;
+                    postProcessingBehavior.profile = copiedProfile;
                     postProcessingBehavior.jitteredMatrixFunc = ppb.jitteredMatrixFunc;
-                    if(ppb.enabled) ppb.enabled = false;
+                    if (ppb.enabled) ppb.enabled = false;
                 }
             }
             if (!foundMainCameraPostProcesor)
@@ -864,7 +966,7 @@ namespace ValheimVRMod.VRCore
                 return;
             }
             var mainCamDepthOfField = mainCamera.gameObject.GetComponent<DepthOfField>();
-            var vrCamDepthOfField =  vrCamera.gameObject.AddComponent<DepthOfField>();
+            var vrCamDepthOfField = vrCamera.gameObject.AddComponent<DepthOfField>();
             if (mainCamDepthOfField != null)
             {
                 CopyClassFields(mainCamDepthOfField, ref vrCamDepthOfField);
@@ -915,11 +1017,14 @@ namespace ValheimVRMod.VRCore
             }
         }
 
-        private void CheckSneakRoomscale() {
-            if (VHVRConfig.RoomScaleSneakEnabled()) {
+        private void CheckSneakRoomscale()
+        {
+            if (VHVRConfig.RoomScaleSneakEnabled())
+            {
                 float height = Valve.VR.InteractionSystem.Player.instance.eyeHeight;
                 float heightThreshold = referencePlayerHeight * VHVRConfig.RoomScaleSneakHeight();
-                if (height < heightThreshold) {
+                if (height < heightThreshold)
+                {
                     _isRoomscaleSneaking = true;
                 }
                 else if (height > heightThreshold + heightThreshold * 0.05f)
@@ -927,7 +1032,8 @@ namespace ValheimVRMod.VRCore
                     _isRoomscaleSneaking = false;
                 }
             }
-            else {
+            else
+            {
                 _isRoomscaleSneaking = false;
             }
         }
@@ -938,30 +1044,30 @@ namespace ValheimVRMod.VRCore
         void DoRoomScaleMovement()
         {
             var player = getPlayerCharacter();
-            if (_vrCam == null || player == null || player.gameObject == null || player.IsAttached()) 
+            if (camera == null || player == null || player.gameObject == null || player.IsAttached())
             {
-              return;
+                return;
             }
-            Vector3 deltaPosition = _vrCam.transform.localPosition - _lastCamPosition;
+            Vector3 deltaPosition = camera.transform.localPosition - _lastCamPosition;
             deltaPosition.y = 0;
             bool shouldMove = deltaPosition.magnitude > 0.005f;
-            if(shouldMove)
+            if (shouldMove)
             {
                 //Check for motion discrepancies
-                if(VHVRConfig.RoomscaleFadeToBlack() && !_fadeManager.IsFadingToBlack)
+                if (VHVRConfig.RoomscaleFadeToBlack() && !_fadeManager.IsFadingToBlack)
                 {
                     var lastDeltaMovement = player.m_body.position - _lastPlayerPosition;
-                    if(player.m_lastAttachBody && _lastPlayerAttachmentPosition != Vector3.zero)
+                    if (player.m_lastAttachBody && _lastPlayerAttachmentPosition != Vector3.zero)
                     {
                         //Account for ships, and moving attachments
                         lastDeltaMovement -= (player.m_lastAttachBody.position - _lastPlayerAttachmentPosition);
                     }
                     lastDeltaMovement.y = 0;
 
-                    if(roomscaleMovement.magnitude * 0.6f > lastDeltaMovement.magnitude)
+                    if (roomscaleMovement.magnitude * 0.6f > lastDeltaMovement.magnitude)
                     {
                         SteamVR_Fade.Start(Color.black, 0);
-                        SteamVR_Fade.Start(Color.clear, 1.5f); 
+                        SteamVR_Fade.Start(Color.clear, 1.5f);
                     }
 
                     _lastPlayerPosition = player.m_body.position;
@@ -969,23 +1075,24 @@ namespace ValheimVRMod.VRCore
                 }
 
                 //Calculate new postion
-                _lastCamPosition = _vrCam.transform.localPosition;
+                _lastCamPosition = camera.transform.localPosition;
                 var globalDeltaPosition = _instance.transform.TransformVector(deltaPosition);
                 globalDeltaPosition.y = 0;
                 roomscaleMovement = globalDeltaPosition;
                 _vrCameraRig.localPosition -= deltaPosition;
-            } else roomscaleMovement = Vector3.zero;
+            }
+            else roomscaleMovement = Vector3.zero;
 
             //Set animation parameters
-            _roomscaleAnimationForwardSpeed =  Mathf.SmoothDamp(_roomscaleAnimationForwardSpeed, shouldMove ? deltaPosition.z / Time.fixedDeltaTime : 0, ref _forwardSmoothVel, ROOMSCALE_STEP_ANIMATION_SMOOTHING, 99f);
-            _roomscaleAnimationSideSpeed =  Mathf.SmoothDamp(_roomscaleAnimationSideSpeed, shouldMove ? deltaPosition.x / Time.fixedDeltaTime : 0, ref _sideSmoothVel, ROOMSCALE_STEP_ANIMATION_SMOOTHING, 99f);
+            _roomscaleAnimationForwardSpeed = Mathf.SmoothDamp(_roomscaleAnimationForwardSpeed, shouldMove ? deltaPosition.z / Time.fixedDeltaTime : 0, ref _forwardSmoothVel, ROOMSCALE_STEP_ANIMATION_SMOOTHING, 99f);
+            _roomscaleAnimationSideSpeed = Mathf.SmoothDamp(_roomscaleAnimationSideSpeed, shouldMove ? deltaPosition.x / Time.fixedDeltaTime : 0, ref _sideSmoothVel, ROOMSCALE_STEP_ANIMATION_SMOOTHING, 99f);
         }
 
         public void ResetRoomscaleCamera()
         {
-            if(_vrCameraRig != null)
+            if (_vrCameraRig != null)
             {
-                Vector3 vrCamPosition = _vrCam.transform.localPosition;
+                Vector3 vrCamPosition = camera.transform.localPosition;
                 vrCamPosition.y = 0;
                 _vrCameraRig.localPosition = -vrCamPosition;
             }

@@ -12,8 +12,10 @@ namespace ValheimVRMod.Utilities
         public const string VR_CAMERA = "VRCamera";
         public const string VR_UI_CAMERA = "VRUICamera";
         public const string HANDS_CAMERA = "VRHandsCamera";
+        public const string SPECTATOR_CAMERA = "SpectatorCamera";
         public const string SKYBOX_CAMERA = "SkyboxCamera";
         public const string VRSKYBOX_CAMERA = "VRSkyboxCamera";
+        public const string SPECTATOR_SKYBOX_CAMERA = "SpectatorSkyboxCamera";
         public const string VRGUI_SCREENSPACE_CAM = "VRGuiScreenSpace";
         public const string WORLD_SPACE_UI_CAMERA = "WorldSpaceUiCamera";
 
@@ -73,7 +75,7 @@ namespace ValheimVRMod.Utilities
         public static Camera getCamera(string name)
         {
             //Check cache
-            if(_cameraCache.ContainsKey(name) && _cameraCache[name] != null) return _cameraCache[name];
+            if (_cameraCache.ContainsKey(name) && _cameraCache[name] != null) return _cameraCache[name];
 
             //Update cache
             foreach (var c in GameObject.FindObjectsOfType<Camera>())
