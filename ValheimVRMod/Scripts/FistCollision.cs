@@ -149,7 +149,7 @@ namespace ValheimVRMod.Scripts {
 
             var isUnequipedWithFistGesture =
                 handGesture.isUnequiped()
-                && SteamVR_Actions.valheim_Grab.GetState(inputSource));
+                && SteamVR_Actions.valheim_Grab.GetState(inputSource);
 
             return (usingClaws() || isUnequipedWithFistGesture);
         }
