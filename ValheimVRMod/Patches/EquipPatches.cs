@@ -78,6 +78,7 @@ namespace ValheimVRMod.Patches {
             var weaponCol = StaticObjects.rightWeaponCollider().GetComponent<WeaponCollision>();
             weaponCol.setColliderParent(meshFilter.transform, ___m_rightItem, true);
             weaponCol.weaponWield = weaponWield;
+            meshFilter.gameObject.AddComponent<WeaponSecondaryManager>().Initialize(meshFilter.transform, ___m_rightItem, true);
             meshFilter.gameObject.AddComponent<WeaponBlock>().weaponWield = weaponWield;
 
             ParticleFix.maybeFix(___m_rightItemInstance);
@@ -159,6 +160,7 @@ namespace ValheimVRMod.Patches {
             }
 
             StaticObjects.leftWeaponCollider().GetComponent<WeaponCollision>().setColliderParent(meshFilter.transform, ___m_leftItem, false);
+            meshFilter.gameObject.AddComponent<WeaponSecondaryManager>().Initialize(meshFilter.transform, ___m_leftItem, false);
             ParticleFix.maybeFix(___m_leftItemInstance);
         }
     }
@@ -280,6 +282,25 @@ namespace ValheimVRMod.Patches {
             foreach (Renderer renderer in obj.GetComponentsInChildren<Renderer>()) {
                 renderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;    
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(Player),nameof(Player.ToggleEquiped))]
+    class PatchEquipActionQueue
+    {
+        static bool Prefix(Player __instance, ref bool __result)
+        {
+            if(__instance != Player.m_localPlayer || !VHVRConfig.UseVrControls())
+            {
+                return true;
+            }
+
+            if (WeaponSecondaryManager.wasSecondaryAttack)
+            {
+                __result = false;
+                return false;
+            }
+            return true;
         }
     }
 }
